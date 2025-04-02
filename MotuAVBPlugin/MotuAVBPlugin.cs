@@ -1,10 +1,11 @@
-// MOTU AVB 插件主类，负责全局初始化和HTTP通信
+// MOTU AVB 插件实现，负责整体通信
 namespace Loupedeck.MotuAVBPlugin
 {
     using System;
-    using System.Net;          // WebClient依赖
+    using System.Net;          // WebClient类型
     using System.Threading.Tasks;
-    using Newtonsoft.Json.Linq; // JSON解析依赖
+    using System.Collections.Generic; // 新增：用于字典
+    using Newtonsoft.Json.Linq; // JSON解析类型
     using Loupedeck;
 
     public class MotuAVBPlugin : Plugin
@@ -15,7 +16,7 @@ namespace Loupedeck.MotuAVBPlugin
         // 设备管理器，负责UID和IP管理
         private DeviceManager _deviceManager;
 
-        // Loupedeck必要配置
+        // Loupedeck必需配置
         public override bool UsesApplicationApiOnly => true;
         public override bool HasNoApplication => true;
 
@@ -55,19 +56,114 @@ namespace Loupedeck.MotuAVBPlugin
     // 设备管理类，负责UID和IP的状态管理
     public class DeviceManager
     {
-        public static string CurrentDeviceIP = "192.168.1.98"; // 当前设备IP地址
-        public static string CurrentUID = "0001f2fffe001e53";  // 当前选中设备UID
+        public static string MainDeviceIP = "192.168.1.98"; // 主设备IP地址
+        private static string _currentUID = "0001f2fffe001e53";  // 当前选中设备UID
+        private static string _currentDeviceIP = "192.168.1.98"; // 当前设备IP地址
+
+        // 设备UID到IP的映射字典
+        private static Dictionary<string, string> _deviceIPMap = new Dictionary<string, string>();
+
+        // 当前设备UID属性，设置时自动更新IP
+        public static string CurrentUID
+        {
+            get { return _currentUID; }
+            set
+            {
+                _currentUID = value;
+                // 当UID变更时更新对应IP
+                UpdateCurrentDeviceIP();
+            }
+        }
+
+        // 当前设备IP属性
+        public static string CurrentDeviceIP
+        {
+            get { return _currentDeviceIP; }
+            private set { _currentDeviceIP = value; }
+        }
+
+        // 构造函数
+        public DeviceManager()
+        {
+            // 初始化时刷新IP映射
+            Task.Run(async () => await RefreshDeviceIPs());
+        }
+
+        // 刷新所有设备的IP映射
+        public static async Task RefreshDeviceIPs()
+        {
+            try
+            {
+                // 清空现有映射
+                _deviceIPMap.Clear();
+
+                // 首先获取所有可用UID
+                var uids = await GetAvailableUIDs();
+
+                // 对每个UID获取对应IP
+                foreach (var uid in uids)
+                {
+                    try
+                    {
+                        var ipUrl = $"avb/{uid}/url";
+                        var json = MotuAVBPlugin.GetDatastore(ipUrl);
+
+                        if (json != null && json["value"] != null)
+                        {
+                            // 存储映射关系
+                            var ipValue = json["value"].ToString();
+                            _deviceIPMap[uid] = ipValue;
+                            PluginLog.Info($"设备映射: UID {uid} -> IP {ipValue}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        PluginLog.Error($"获取设备IP失败 (UID: {uid}): {ex.Message}");
+                    }
+                }
+
+                // 更新当前IP
+                UpdateCurrentDeviceIP();
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error($"刷新设备IP映射失败: {ex.Message}");
+            }
+        }
+
+        // 更新当前设备IP
+        private static void UpdateCurrentDeviceIP()
+        {
+            // 检查映射中是否有该UID对应的IP
+            if (_deviceIPMap.ContainsKey(_currentUID))
+            {
+                CurrentDeviceIP = _deviceIPMap[_currentUID];
+                PluginLog.Info($"已切换到设备IP: {CurrentDeviceIP} (UID: {_currentUID})");
+            }
+            else
+            {
+                // 如果没有映射，使用主IP
+                CurrentDeviceIP = MainDeviceIP;
+                PluginLog.Info($"未找到UID映射，使用主IP: {CurrentDeviceIP}");
+            }
+        }
 
         // 获取所有可用设备UID列表
         public static async Task<string[]> GetAvailableUIDs()
         {
             try
             {
-                var json = MotuAVBPlugin.GetDatastore("avb/devs"); // 查询设备列表
-                return json["value"].ToString().Split(':'); // 解析冒号分隔的UID列表
+                using (var client = new WebClient())
+                {
+                    var url = $"http://{MainDeviceIP}/datastore/avb/devs"; // 查询设备列表
+                    var response = await client.DownloadStringTaskAsync(url);
+                    var json = JObject.Parse(response);
+                    return json["value"].ToString().Split(':'); // 解析冒号分隔的UID列表
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                PluginLog.Error($"获取可用设备失败: {ex.Message}");
                 return new string[0]; // 异常时返回空数组
             }
         }
@@ -75,8 +171,15 @@ namespace Loupedeck.MotuAVBPlugin
         // 根据UID获取设备名称
         public static string GetDeviceName(string uid)
         {
-            var json = MotuAVBPlugin.GetDatastore($"avb/{uid}/entity_name");
-            return json?["value"]?.ToString() ?? "未知设备"; // 空值处理
+            try
+            {
+                var json = MotuAVBPlugin.GetDatastore($"avb/{uid}/entity_name");
+                return json?["value"]?.ToString() ?? "未知设备"; // 空值处理
+            }
+            catch
+            {
+                return "未知设备";
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿// 精确匹配主机缓冲区API的按钮实现
+﻿// 安全偏移量切换按钮实现
 namespace Loupedeck.MotuAVBPlugin.Buttons
 {
     using System;
@@ -6,20 +6,20 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
 
     using Loupedeck.MotuAVBPlugin.Base;
 
-    public class BufferSize_Button : Set_Button_Base
+    public class Safety_Offset_Button : Set_Button_Base
     {
-        // 预设缓冲区大小（根据实际设备支持值）
-        private static readonly string[] BufferPresets = {
-            "64", "128", "256", "512", "1024"
+        // 预设安全偏移量值
+        private static readonly string[] OffsetPresets = {
+            "16", "24", "32", "48", "64", "128", "256"
         };
         private int _currentPresetIndex;
 
-        public BufferSize_Button()
+        public Safety_Offset_Button()
             : base(
-                displayName: "缓冲区大小",
-                description: "点击切换主机缓冲区",
+                displayName: "安全偏移量",
+                description: "点击切换安全偏移量",
                 groupName: "Setup",
-                dataPath: "current_buffer_size_1x", // 精确API路径
+                dataPath: "current_safety_offset_1x", // 精确API路径
                 isHostParam: true) // 标记为宿主参数
         {
             // 初始化时匹配当前值
@@ -29,15 +29,15 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
         private async Task InitializePresetIndexAsync()
         {
             var current = await GetValue();
-            _currentPresetIndex = Array.IndexOf(BufferPresets, current);
+            _currentPresetIndex = Array.IndexOf(OffsetPresets, current);
             if (_currentPresetIndex < 0)
                 _currentPresetIndex = 0;
         }
 
         protected override void RunCommand(string actionParameter)
         {
-            _currentPresetIndex = (_currentPresetIndex + 1) % BufferPresets.Length;
-            _ = SetValue(BufferPresets[_currentPresetIndex]);
+            _currentPresetIndex = (_currentPresetIndex + 1) % OffsetPresets.Length;
+            _ = SetValue(OffsetPresets[_currentPresetIndex]);
         }
 
         protected override BitmapImage GetCommandImage(string actionParameter, PluginImageSize imageSize)

@@ -13,7 +13,7 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
             : base(
                 displayName: "采样率",
                 description: "点击切换设备采样率",
-                groupName: "设备控制",
+                groupName: "Setup",
                 dataPath: "cfg/0/current_sampling_rate") // 设备参数路径
         {
             // 添加预设值切换支持

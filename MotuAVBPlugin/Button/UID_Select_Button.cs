@@ -13,9 +13,14 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
         private int _currentIndex;                       // 当前选中索引
 
         public UID_Select_Button()
-            : base("设备切换", "选择当前控制设备", "设备管理")
+            : base("UID Select", "选择当前控制设备", "Choose")
         {
-            Task.Run(async () => await RefreshUIDs()); // 初始化时刷新设备列表
+            Task.Run(async () =>
+            {
+                // 初始化时刷新设备列表和IP映射
+                await DeviceManager.RefreshDeviceIPs();
+                await RefreshUIDs();
+            });
         }
 
         // 刷新设备UID列表
@@ -24,8 +29,12 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
             _availableUIDs = await DeviceManager.GetAvailableUIDs();
             if (_availableUIDs.Length > 0)
             {
-                DeviceManager.CurrentUID = _availableUIDs.First(); // 默认选择第一个
-                ActionImageChanged(); // 更新UI
+                // 设置当前UID为第一个设备
+                // 注意：这将自动触发DeviceManager中的IP更新
+                DeviceManager.CurrentUID = _availableUIDs.First();
+
+                // 更新UI
+                ActionImageChanged();
             }
         }
 
@@ -36,7 +45,7 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
                 return;
 
             _currentIndex = (_currentIndex + 1) % _availableUIDs.Length; // 循环索引
-            DeviceManager.CurrentUID = _availableUIDs[_currentIndex];
+            DeviceManager.CurrentUID = _availableUIDs[_currentIndex]; // 这会自动更新IP
             ActionImageChanged(); // 更新UI
         }
 
@@ -46,9 +55,13 @@ namespace Loupedeck.MotuAVBPlugin.Buttons
             using (var bitmap = new BitmapBuilder(imageSize))
             {
                 bitmap.Clear(BitmapColor.Black);
+
                 var deviceName = DeviceManager.GetDeviceName(DeviceManager.CurrentUID);
-                bitmap.DrawText(deviceName, fontSize: 14);      // 显示设备名称
-                //bitmap.DrawText($"UID: {DeviceManager.CurrentUID}", y: 30, fontSize: 10); // 显示UID
+                bitmap.DrawText(deviceName, fontSize: 18);      // 显示设备名称
+
+                // 显示当前设备IP（可选，用于调试）
+                //bitmap.DrawText($"IP: {DeviceManager.CurrentDeviceIP}", y: 30, fontSize: 10);
+
                 return bitmap.ToImage();
             }
         }

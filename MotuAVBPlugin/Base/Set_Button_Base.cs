@@ -4,6 +4,7 @@ namespace Loupedeck.MotuAVBPlugin.Base
     using System;
     using System.Net;
     using System.Timers;
+    using System.Threading.Tasks;
     using Newtonsoft.Json.Linq;
     using Loupedeck;
 
@@ -12,7 +13,7 @@ namespace Loupedeck.MotuAVBPlugin.Base
         protected Timer _updateTimer;
         protected string _currentValue;
         protected string _dataPath;
-        protected bool _isHostParameter; // 新增：标识是否为宿主参数
+        protected bool _isHostParameter; // 标识是否为宿主参数
 
         protected Set_Button_Base(
             string displayName,
@@ -36,18 +37,29 @@ namespace Loupedeck.MotuAVBPlugin.Base
         {
             try
             {
-                var prefix = _isHostParameter ? "host/win" : $"avb/{DeviceManager.CurrentUID}";
-                var url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/{prefix}/{_dataPath}";
+                string url;
+
+                if (_isHostParameter)
+                {
+                    // 对于主机参数，使用当前设备的IP地址
+                    url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/host/win/{_dataPath}";
+                }
+                else
+                {
+                    // 对于设备参数，使用主IP地址但包含设备UID
+                    url = $"http://{DeviceManager.MainDeviceIP}/datastore/avb/{DeviceManager.CurrentUID}/{_dataPath}";
+                }
 
                 using (var client = new WebClient())
                 {
                     var response = await client.DownloadStringTaskAsync(url);
-                    return JObject.Parse(response)["value"].ToString();
+                    var json = JObject.Parse(response);
+                    return json["value"].ToString();
                 }
             }
             catch (Exception ex)
             {
-                PluginLog.Error($"获取值失败：{ex.Message}");
+                PluginLog.Error($"获取值失败：{ex.Message} (路径: {_dataPath})");
                 return "ERR";
             }
         }
@@ -57,8 +69,18 @@ namespace Loupedeck.MotuAVBPlugin.Base
         {
             try
             {
-                var prefix = _isHostParameter ? "host/win" : $"avb/{DeviceManager.CurrentUID}";
-                var url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/{prefix}/{_dataPath}";
+                string url;
+
+                if (_isHostParameter)
+                {
+                    // 对于主机参数，使用当前设备的IP地址
+                    url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/host/win/{_dataPath}";
+                }
+                else
+                {
+                    // 对于设备参数，使用主IP地址但包含设备UID
+                    url = $"http://{DeviceManager.MainDeviceIP}/datastore/avb/{DeviceManager.CurrentUID}/{_dataPath}";
+                }
 
                 using (var client = new WebClient())
                 {
@@ -68,7 +90,7 @@ namespace Loupedeck.MotuAVBPlugin.Base
             }
             catch (Exception ex)
             {
-                PluginLog.Error($"设置值失败：{ex.Message}");
+                PluginLog.Error($"设置值失败：{ex.Message} (路径: {_dataPath}, 值: {newValue})");
             }
         }
 
@@ -88,6 +110,13 @@ namespace Loupedeck.MotuAVBPlugin.Base
             {
                 //bitmap.Clear(_currentValue == "ERR" ? BitmapColor.Red : BitmapColor.Black);
                 bitmap.DrawText(_currentValue, fontSize: 24);
+
+                // 主机参数指示点
+                //if (_isHostParameter)
+                //{
+                //    bitmap.FillCircle(5, 5, 3, BitmapColor.Orange);
+                //}
+
                 return bitmap.ToImage();
             }
         }
