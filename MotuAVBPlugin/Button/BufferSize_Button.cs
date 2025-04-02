@@ -1,39 +1,52 @@
-﻿// 缓冲区大小按钮
+﻿// 精确匹配主机缓冲区API的按钮实现
 namespace Loupedeck.MotuAVBPlugin.Buttons
 {
     using Loupedeck.MotuAVBPlugin.Base;
 
     public class BufferSize_Button : Set_Button_Base
     {
-        // 预设缓冲区大小（根据API支持值调整）
+        // 预设缓冲区大小（根据实际设备支持值）
         private static readonly string[] BufferPresets = {
-            "64",
-            "128",
-            "256",
-            "512"
+            "64", "128", "256", "512", "1024"
         };
+        private int _currentPresetIndex;
 
         public BufferSize_Button()
             : base(
-                displayName: "缓冲区",
-                description: "点击切换缓冲区大小",
-                groupName: "设备控制",
-                dataPath: "cfg/0/buffer_size",
-                presetValues: BufferPresets)
+                displayName: "缓冲区大小",
+                description: "点击切换主机缓冲区",
+                groupName: "主机设置",
+                dataPath: "current_buffer_size_1x", // 精确API路径
+                isHostParam: true) // 标记为宿主参数
         {
+            // 初始化时匹配当前值
+            _ = InitializePresetIndexAsync();
         }
 
-        // 自定义显示格式
+        private async Task InitializePresetIndexAsync()
+        {
+            var current = await GetValue();
+            _currentPresetIndex = Array.IndexOf(BufferPresets, current);
+            if (_currentPresetIndex < 0)
+                _currentPresetIndex = 0;
+        }
+
+        protected override void RunCommand(string actionParameter)
+        {
+            _currentPresetIndex = (_currentPresetIndex + 1) % BufferPresets.Length;
+            _ = SetValue(BufferPresets[_currentPresetIndex]);
+        }
+
         protected override BitmapImage GetCommandImage(string actionParameter, PluginImageSize imageSize)
         {
             using (var bitmap = new BitmapBuilder(imageSize))
             {
                 bitmap.Clear(BitmapColor.Black);
 
-                // 显示数值和单位
+                // 主显示
                 bitmap.DrawText(
-                    text: $"{_currentValue} ",
-                    fontSize: 18,
+                    text: $"{_currentValue}",
+                    fontSize: 20,
                     color: BitmapColor.White);
 
                 return bitmap.ToImage();

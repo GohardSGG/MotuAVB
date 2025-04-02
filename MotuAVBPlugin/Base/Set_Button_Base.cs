@@ -1,4 +1,4 @@
-﻿// 基础按钮类：集成通用数据访问方法
+﻿// 增强版基类：支持主机/设备双模式路径
 namespace Loupedeck.MotuAVBPlugin.Base
 {
     using System;
@@ -12,38 +12,35 @@ namespace Loupedeck.MotuAVBPlugin.Base
         protected Timer _updateTimer;
         protected string _currentValue;
         protected string _dataPath;
-        protected string[] _presetValues;
+        protected bool _isHostParameter; // 新增：标识是否为宿主参数
 
         protected Set_Button_Base(
             string displayName,
             string description,
             string groupName,
             string dataPath,
-            int updateInterval = 2000,
-            string[] presetValues = null)
+            bool isHostParam = false,
+            int updateInterval = 300)
             : base(displayName, description, groupName)
         {
             _dataPath = dataPath;
-            _presetValues = presetValues;
+            _isHostParameter = isHostParam;
 
-            // 初始化定时更新
             _updateTimer = new Timer(updateInterval);
             _updateTimer.Elapsed += async (s, e) => await UpdateValue();
             _updateTimer.Start();
-
-            // 默认点击切换预设值
-            if (_presetValues != null)
-                this.AddParameter("toggle", "切换值", "基本操作");
         }
 
-        // 通用值获取方法
+        // 通用值获取（自动处理host/device路径）
         protected async Task<string> GetValue()
         {
             try
             {
+                var prefix = _isHostParameter ? "host/win" : $"avb/{DeviceManager.CurrentUID}";
+                var url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/{prefix}/{_dataPath}";
+
                 using (var client = new WebClient())
                 {
-                    var url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/avb/{DeviceManager.CurrentUID}/{_dataPath}";
                     var response = await client.DownloadStringTaskAsync(url);
                     return JObject.Parse(response)["value"].ToString();
                 }
@@ -55,14 +52,16 @@ namespace Loupedeck.MotuAVBPlugin.Base
             }
         }
 
-        // 通用值设置方法
+        // 通用值设置（自动处理host/device路径）
         protected async Task SetValue(string newValue)
         {
             try
             {
+                var prefix = _isHostParameter ? "host/win" : $"avb/{DeviceManager.CurrentUID}";
+                var url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/{prefix}/{_dataPath}";
+
                 using (var client = new WebClient())
                 {
-                    var url = $"http://{DeviceManager.CurrentDeviceIP}/datastore/avb/{DeviceManager.CurrentUID}/{_dataPath}";
                     client.Headers[HttpRequestHeader.ContentType] = "application/x-www-form-urlencoded";
                     await client.UploadStringTaskAsync(url, "PATCH", $"json={{\"value\":{newValue}}}");
                 }
@@ -73,7 +72,6 @@ namespace Loupedeck.MotuAVBPlugin.Base
             }
         }
 
-        // 自动更新当前值
         protected async Task UpdateValue()
         {
             var newValue = await GetValue();
@@ -84,23 +82,11 @@ namespace Loupedeck.MotuAVBPlugin.Base
             }
         }
 
-        // 默认点击切换预设值
-        protected override void RunCommand(string actionParameter)
-        {
-            if (_presetValues == null)
-                return;
-
-            var currentIndex = Array.IndexOf(_presetValues, _currentValue);
-            var newIndex = (currentIndex + 1) % _presetValues.Length;
-            _ = SetValue(_presetValues[newIndex]);
-        }
-
-        // 基础显示模板
         protected override BitmapImage GetCommandImage(string actionParameter, PluginImageSize imageSize)
         {
             using (var bitmap = new BitmapBuilder(imageSize))
             {
-                bitmap.Clear(BitmapColor.Black);
+                //bitmap.Clear(_currentValue == "ERR" ? BitmapColor.Red : BitmapColor.Black);
                 bitmap.DrawText(_currentValue, fontSize: 24);
                 return bitmap.ToImage();
             }
